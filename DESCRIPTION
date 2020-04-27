@@ -1,0 +1,15 @@
+Package: simdiversity-politics
+Type: Package
+Title: Contains datasets about politics for the simdiversity project
+Version: 0.1.0
+Author: Mattia Egloff <megloff1@unil.ch> and Fran\\u00e7ois Bavaud <fbavaud@unil.ch>
+Maintainer: Mattia Egloff <megloff1@unil.ch>
+Description: The package contains four datasets. Each dataset contains informations
+    about councillors votes and polls of the swiss and italian legislative chambers.
+    For the swiss data the legislative periods 49 and 50 have been considered,
+    for the italian data the legislative periods 17 and 18.
+License: Public Domain
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 3.5.0)
