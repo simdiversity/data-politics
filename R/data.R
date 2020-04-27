@@ -1,4 +1,4 @@
-#' @importFrom list list
+#' @importFrom list tibble
 NULL
 
 #' Swiss legislator 49
@@ -21,3 +21,12 @@ NULL
 "swiss_legislator_49"
 
 
+#' Swiss legislator 50
+"swiss_legislator_50"
+
+
+#' Italian legislator 17
+"italian_legislator_17"
+
+#' Italian legislator 18
+"italian_legislator_18"
