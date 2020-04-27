@@ -1,1 +1,3 @@
-# data-politics
+# simdiversity.data.politics
+
+A data package

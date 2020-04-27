@@ -1,4 +1,4 @@
-Package: simdiversity-politics
+Package: simdiversity.data.politics
 Type: Package
 Title: Contains datasets about politics for the simdiversity project
 Version: 0.1.0
