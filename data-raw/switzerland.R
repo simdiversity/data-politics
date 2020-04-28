@@ -241,23 +241,6 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
       "Non ha partecipato" = 6
     )
 
-  # scores <-
-  #   scores %>%
-  #   mutate_at(vars(-i_id), ~replace_na(., "NA")) %>%
-  #   mutate_at(vars(-i_id), ~recode(., !!!score_coding)) %>%
-  #   print()
-
-  # Scores
-  score_coding <- c(
-    "Favorevole" = 0,
-    "Astensione" = 1,
-    "Ha votato" = 2,
-    "Presidente di turno" = 3,
-    "In missione" = 3,
-    "Contrario" = 4,
-    "NA" = 5,
-    "Non ha partecipato" = 6
-  )
 
   if (debug) {
     values_sparql <- "SELECT DISTINCT ?infoAssenza ?espressione
