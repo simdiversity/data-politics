@@ -8,8 +8,8 @@ Description: The package contains four datasets. Each dataset contains informati
     about councillors votes and polls of the swiss and italian legislative chambers.
     For the swiss data the legislative periods 49 and 50 have been considered,
     for the italian data the legislative periods 17 and 18.
-License: Public Domain
+License: CC0
 Encoding: UTF-8
 LazyData: true
-Depends: 
+Depends:
     R (>= 3.5.0)
