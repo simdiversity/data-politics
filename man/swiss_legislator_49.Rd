@@ -5,18 +5,7 @@
 \alias{swiss_legislator_49}
 \title{Swiss legislator 49}
 \format{
-A data frame with nine variables:
-\describe{
-\item{\code{x}}{age in years}
-\item{\code{qx}}{probability of death at age \code{x}}
-\item{\code{lx}}{number of survivors, of birth cohort of 100,000, at next integral age}
-\item{\code{dx}}{number of deaths that would occur between integral ages}
-\item{\code{Lx}}{Number of person-years lived between \code{x} and \code{x+1}}
-\item{\code{Tx}}{Total number of person-years lived beyond age \code{x}}
-\item{\code{ex}}{Average number of years of life remaining for members of cohort alive at age \code{x}}
-\item{\code{sex}}{Sex}
-\item{\code{year}}{Year}
-}
+An object of class \code{list} of length 4.
 }
 \usage{
 swiss_legislator_49

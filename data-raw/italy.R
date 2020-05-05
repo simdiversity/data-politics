@@ -11,7 +11,19 @@ library("tools")
 library("tidyverse")
 library("SPARQL")
 
-debug = FALSE
+debug = TRUE
+
+
+as_matrix <- function(x, rownames_column){
+  rownames_column <- enquo(rownames_column)
+  if (!tibble::is_tibble(x)) stop("x must be a tibble")
+  x <- x %>% select(sort(names(.))) %>% arrange(!!rownames_column)
+  x <- column_to_rownames(x, quo_name(rownames_column))
+  y <- as.matrix.data.frame(x)
+  colnames(y) <- colnames(x)
+  rownames(y) <- rownames(x)
+  y
+}
 
 get.sparql_query_result <-
   function(query,
@@ -26,26 +38,13 @@ individuals_sparql <-  "
   SELECT DISTINCT
     ?i_id
     ?councillor_uri
-    (CONCAT(?last_name, ' ', ?first_name) as ?names)
+    ?first_name
+    ?last_name
     ?info
     ?birth_date
     ?birth_place
+    ?death_date
     ?gender
-    ?inizioMandato
-    ?fineMandato
-    ?aggiornamento
-    ?electoral_district
-    COUNT(DISTINCT ?madatoCamera) as ?numeroMandati
-    (CONCAT('[',GROUP_CONCAT(DISTINCT ?groupe_id;separator=','),']')
-    as ?groupe)
-    (CONCAT('[',GROUP_CONCAT(DISTINCT ?groupe_name;separator=','),']')
-    as ?groupe_full)
-    (CONCAT('[',GROUP_CONCAT(DISTINCT ?groupe_short;separator=','),']')
-    as ?party)
-    (CONCAT('[',GROUP_CONCAT(DISTINCT ?start_date_groupe;separator=','),']')
-    as ?groupes_start_date)
-    (CONCAT('[',GROUP_CONCAT(DISTINCT ?end_date_groupe;separator=','),']')
-    as ?groupes_end_date)
   WHERE {
     ?persona ocd:rif_mandatoCamera ?mandato; a foaf:Person.
 
@@ -66,28 +65,10 @@ individuals_sparql <-  "
           rdfs:label ?nato; ocd:rif_luogo ?birth_placeUri.
       ?birth_placeUri dc:title ?birth_place.
     }
-
-    ?mandato ocd:rif_elezione ?elezione.
-    OPTIONAL{ ?mandato ocd:endDate ?fineMandato }
-    OPTIONAL{ ?mandato ocd:startDate ?inizioMandato }
-
-    ?persona ocd:rif_mandatoCamera ?madatoCamera.
-
-    ?elezione dc:coverage ?electoral_district.
-
-    OPTIONAL{ ?councillor_uri ocd:aderisce ?aderisce }
-    OPTIONAL{ ?aderisce ocd:rif_gruppoParlamentare ?groupe_id }
-    OPTIONAL{ ?aderisce ocd:startDate ?start_date_groupe}
-    OPTIONAL{ ?aderisce ocd:endDate ?end_date_groupe }
     OPTIONAL{
-      ?groupe_id <http://purl.org/dc/terms/alternative> ?groupe_short
+      ?persona <http://purl.org/vocab/bio/0.1/Death> ?morte.
+      ?morte <http://purl.org/vocab/bio/0.1/date> ?death_date.
     }
-    OPTIONAL{ ?groupe_id dc:title ?groupe_name}
-    OPTIONAL{
-    ?councillor_uri
-        <http://lod.xdams.org/ontologies/ods/modified> ?aggiornamento.
-    }
-
     BIND(
       REPLACE(
         str(?councillor_uri), 'http://dati.camera.it/ocd/deputato.rdf/', ''
@@ -95,39 +76,104 @@ individuals_sparql <-  "
       AS ?i_id
     )
   }
-  GROUP BY ?i_id ?councillor_uri ?info ?birth_date ?birth_place
-    ?gender ?inizioMandato ?fineMandato ?electoral_district ?aggiornamento
-    ?last_name ?first_name
+"
+
+party_names_sparql <- "
+SELECT DISTINCT ?party_name_long ?party_name (GROUP_CONCAT(DISTINCT ?old_name; separator=';') AS ?old_names)
+WHERE {
+
+  ?gruppo a ocd:gruppoParlamentare;
+                   ocd:rif_leg <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>.
+
+  OPTIONAL{?gruppo <http://purl.org/dc/terms/alternative> ?party_name}
+  ?gruppo dc:title ?party_name_long.
+  OPTIONAL{?gruppo ocd:denominazione [dc:title ?old_name_long]}
+  OPTIONAL{?gruppo ocd:denominazione [<http://purl.org/dc/terms/alternative> ?old_name]}
+  OPTIONAL{?gruppo ocd:denominazione [dc:date ?name_change_date]}
+  FILTER(?old_name != ?party_name)
+} GROUP BY ?party_name_long ?party_name
+"
+
+individuals_partys_sparql <- "
+SELECT DISTINCT ?i_id ?party_name ?start_date	?end_date
+WHERE {
+  ?councillor_uri a ocd:deputato; ocd:aderisce ?aderisce;
+       ocd:rif_leg <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>.
+
+  ?aderisce ocd:rif_gruppoParlamentare ?gruppo.
+
+  ?gruppo dc:title ?long_party_name.
+  ?gruppo <http://purl.org/dc/terms/alternative> ?party_name.
+  ?aderisce ocd:startDate ?start_date.
+  OPTIONAL{?aderisce ocd:endDate ?end_date}
+
+  BIND(
+    REPLACE(
+      str(?councillor_uri), 'http://dati.camera.it/ocd/deputato.rdf/', ''
+    )
+    AS ?i_id
+  )
+}
+"
+
+individuals_mandates_sparql <-  "
+SELECT DISTINCT ?i_id ?electoral_district ?election_list ?election_date
+  ?start_mandate ?end_mandate ?end_motive
+WHERE {
+?mandato a ocd:mandatoCamera;
+  ocd:rif_leg <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>;
+  ocd:rif_deputato ?councillor_uri.
+
+## mandato
+
+OPTIONAL{?mandato ocd:endDate ?end_mandate}
+OPTIONAL{?mandato ocd:startDate ?start_mandate}
+OPTIONAL{?mandato ocd:motivoTermine ?end_motive}
+
+## elezione
+OPTIONAL{?mandato ocd:rif_elezione ?elezione}
+OPTIONAL{?elezione dc:coverage ?electoral_district}
+OPTIONAL{?elezione ocd:lista ?election_list}
+OPTIONAL{?elezione dc:date ?election_date}
+
+
+  BIND(
+    REPLACE(
+      str(?councillor_uri), 'http://dati.camera.it/ocd/deputato.rdf/', ''
+    )
+    AS ?i_id
+  )
+}
 "
 
 votes_sparql <- "
   SELECT DISTINCT
     ?v_id
-    ?vote_uri
     ?date
-    ?title
+    ?type
+    ?act_id
+    ?act_type
+    ?act_demanded_by
     ?description
     ?final_vote
-    ?voters_n
-    ?result
-    ?in_favor
-    ?against
-    ?absetions
+    ?trust_vote
+    ?secret_vote
   WHERE {
     ?vote_uri a ocd:votazione;
         dc:identifier ?v_id;
         ocd:rif_leg
             <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>.
 
-    OPTIONAL{?vote_uri ocd:votazioneFinale ?final_vote}
     OPTIONAL{?vote_uri dc:date ?date}
+    OPTIONAL{?vote_uri dc:type ?type}
+    OPTIONAL{?vote_uri ocd:rif_attoCamera [dc:identifier ?act_id]}
+    OPTIONAL{?vote_uri ocd:rif_attoCamera [dc:type ?act_type]}
+    OPTIONAL{?vote_uri ocd:rif_attoCamera [ocd:iniziativa ?act_demanded_by]}
     OPTIONAL{?vote_uri rdfs:label ?title}
     OPTIONAL{?vote_uri dc:description ?description}
-    OPTIONAL{?vote_uri ocd:approvato ?result}
-    OPTIONAL{?vote_uri ocd:votanti ?voters_n }
-    OPTIONAL{?vote_uri ocd:favorevoli ?in_favor }
-    OPTIONAL{?vote_uri ocd:contrari ?against }
-    OPTIONAL{?vote_uri ocd:astenuti ?absetions }
+    OPTIONAL{?vote_uri ocd:votazioneFinale ?final_vote}
+    OPTIONAL{?vote_uri ocd:richiestaFiducia ?trust_vote}
+    OPTIONAL{?vote_uri ocd:votazioneSegreta ?secret_vote}
   }
   LIMIT %s OFFSET %s
 "
@@ -238,34 +284,86 @@ region_codes <- c(
 
 import_itanian_politics <- function(legislative_period) {
 
-  if (debug) {
-    periods_sparql <- "SELECT DISTINCT ?leg_with_scores
-    WHERE {
-      [] ocd:rif_votazione [];
-            ocd:rif_deputato [ocd:rif_leg ?leg_with_scores].
-    }"
-    get.sparql_query_result(periods_sparql) %>%
-      unlist(use.names = FALSE) %>%
-      str_extract("[0-9]+") %>%
-        {
-          result <- (legislative_period %in% .)
-          if (!result) message(
-            "The scores data is not avilable for the selected legislative perriod."
-          )
-        }
-  }
+  # if (debug) {
+  #   periods_sparql <- "SELECT DISTINCT ?leg_with_scores
+  #   WHERE {
+  #     [] ocd:rif_votazione [];
+  #           ocd:rif_deputato [ocd:rif_leg ?leg_with_scores].
+  #   }"
+  #   get.sparql_query_result(periods_sparql) %>%
+  #     unlist(use.names = FALSE) %>%
+  #     str_extract("[0-9]+") %>%
+  #       {
+  #         result <- (legislative_period %in% .)
+  #         if (!result) message(
+  #           "The scores data is not avilable for the selected legislative perriod."
+  #         )
+  #       }
+  # }
 
   # Individuals ----------------------------------------------------------------
-  individuals <-
-    sprintf(individuals_sparql, legislative_period) %>%
+  if (debug) message("collect parties")
+
+  parties <-
+    sprintf(party_names_sparql, legislative_period) %>%
+    get.sparql_query_result()
+
+  if (debug) message("collect individuals_parties")
+  individuals_parties <-
+    sprintf(individuals_partys_sparql, legislative_period) %>%
     get.sparql_query_result() %>%
+    arrange(i_id) %>%
+    group_by(i_id) %>%
+    nest()
+
+  if (debug) message("collect individuals_mandates")
+  individuals_mandates <-
+    sprintf(individuals_mandates_sparql, legislative_period) %>%
+    get.sparql_query_result()  %>%
     mutate(
-      names = toTitleCase(tolower(names)),
       region = recode(electoral_district, !!!region_codes)
     ) %>%
+    group_by(i_id) %>%
+    nest()
+
+  if (debug) message("collect individuals")
+   individuals <-
+    sprintf(individuals_sparql, legislative_period) %>%
+    get.sparql_query_result() %>%
+    arrange(i_id) %>%
+    full_join(individuals_parties, by = "i_id") %>%
+    full_join(individuals_mandates, by = "i_id")  %>%
+    unnest(data.y) %>%
+    rename(parties = data.x)  %>%
+     mutate(
+       first_name = toTitleCase(tolower(first_name)),
+       last_name = toTitleCase(tolower(last_name)),
+       birth_place =  toTitleCase(tolower(birth_place))
+     ) %>%
+    type_convert(cols(
+      i_id = col_character(),
+      councillor_uri = col_character(),
+      first_name = col_character(),
+      last_name = col_character(),
+      info = col_character(),
+      birth_date = col_date(format = "%Y%m%d" ),
+      birth_place = col_character(),
+      death_date = col_date(format = "%Y%m%d" ),
+      gender = col_factor(),
+      electoral_district = col_character(),
+      election_list = col_character(),
+      election_date = col_date(format = "%Y%m%d" ),
+      start_mandate = col_date(format = "%Y%m%d" ),
+      end_mandate = col_date(format = "%Y%m%d" ),
+      end_motive = col_character(),
+      region = col_character()
+    )) %>%
     arrange(i_id)
 
+
+
   # Votes ----------------------------------------------------------------------
+  if (debug) message("collect variables")
   limit = 10000
   variables <- NULL
   iter <- 0
@@ -273,12 +371,11 @@ import_itanian_politics <- function(legislative_period) {
   repeat {
       query_result <- tryCatch(
         {
-          sprintf(votes_sparql, legislative_period, limit, iter * limit) %>%
-            get.sparql_query_result()
+          sparql_query <- sprintf(votes_sparql, legislative_period, limit, iter * limit)
+          get.sparql_query_result(sparql_query)
         }, error = function(e) {
-          iter * limit %>%
-            paste("Retrying with offset:", ., "\n") %>%
-            warning()
+          warning(paste("Retrying with offset:", iter * limit, "\n"))
+          message(sparql_query)
           trys <- trys - 1
           Sys.sleep(120)
           print(e)
@@ -303,10 +400,6 @@ import_itanian_politics <- function(legislative_period) {
           full_join(
             variables,
             .,
-            by = c(
-              "v_id", "vote_uri", "date", "title", "description", "final_vote",
-              "voters_n", "result", "in_favor", "against", "absetions"
-            ),
             suffix = c("", as.character(iter))
           )
         }
@@ -316,8 +409,28 @@ import_itanian_politics <- function(legislative_period) {
     iter <- iter + 1
 
   }
+  variables <-
+    variables %>%
+    mutate(
+      final_vote = final_vote == 1,
+      trust_vote = trust_vote == 1,
+      secret_vote = secret_vote == 1
+    ) %>%
+    type_convert(cols(
+      v_id = col_character(),
+      date = col_date(format = "%Y%m%d" ),
+      type = col_factor(),
+      act_id = col_character(),
+      act_type = col_factor(),
+      act_demanded_by = col_factor(),
+      description = col_character(),
+      final_vote = col_logical(),
+      trust_vote = col_logical(),
+      secret_vote = col_logical()
+    ))
 
   # Scores ---------------------------------------------------------------------
+  if (debug) message("collect scores")
   party <- FALSE
   limit <- 600
   query <- ifelse(party, scores_party_sparql, scores_sparql)
@@ -332,9 +445,8 @@ import_itanian_politics <- function(legislative_period) {
           get.sparql_query_result(sparql_query)
       },
       error = function(e) {
-        "Retrying with offset: %i\n" %>%
-          sprintf(limit * iter) %>%
-          warning()
+          warning(sprintf("Retrying with offset: %i\n", limit * iter))
+          message(sparql_query)
         print(e)
         trys <- trys - 1
         Sys.sleep(120)
@@ -371,30 +483,28 @@ import_itanian_politics <- function(legislative_period) {
       } %>%
       arrange(i_id)
 
-    if (debug) {
-      "%s. n of results = %s" %>%
-        sprintf(iter, nrow(results)) %>%
-        message()
-    }
+    if (debug) message(sprintf("%s. n of results = %s", iter, nrow(query_result)))
 
     iter <- iter + 1
   }
 
-  # indicate individuals with no scores
+  # No scores individuals ------------------------------------------------------
+  if (debug) message("add no_scores variable to individuals")
   individuals <-
     individuals %>%
-    mutate(has_scores = (i_id %in% scores$i_id))
+    mutate(has_scores = i_id %in% scores$i_id)
 
   # Recode ---------------------------------------------------------------------
-  score_coding <- c(
-    "Favorevole" = 0,
-    "Astensione" = 1,
-    "Ha votato" = 2,
+  if (debug) message("recode scores")
+  score_codes <- c(
+    "Contrario" = 0,
+    "Favorevole" = 1,
+    "Astensione" = 2,
     "Presidente di turno" = 3,
-    "In missione" = 3,
-    "Contrario" = 4,
+    "In missione" = 4,
     "NA" = 5,
-    "Non ha partecipato" = 6
+    "Non ha partecipato" = 6,
+    "Ha votato" = 7
   )
 
   if (debug) {
@@ -407,23 +517,43 @@ import_itanian_politics <- function(legislative_period) {
     }"
 
     get.sparql_query_result(values_sparql) %>%
-      mutate(code = recode(score, !!!score_coding)) %>%
+      mutate(code = recode(score, !!!score_codes)) %>%
       arrange(code)
   }
 
+  scores <-
+  scores %>%
+    mutate_at(vars(-i_id), ~replace_na(., "NA")) %>%
+    mutate_at(vars(-i_id), ~recode(., !!!score_codes)) %>%
+    mutate_at(vars(-i_id), as.integer) %>%
+    as_matrix(i_id)
+
+  score_codes <- c(
+    `0` = "No",
+    `1` = "Yes",
+    `2` = "Abstention",
+    `3` = "The president is not voting",
+    `4` = "Excused",
+    `5` = "NA",
+    `6` = "Did not participate",
+    `7` = "Has voted"
+  )
+
   # return ---------------------------------------------------------------------
+  if (debug) message("return")
   list(
-    individuals = individuals,
-    variables = variables,
-    scores = scores,
-    score_codes = score_coding
+    members_of_parliment = individuals,
+    voting_items = variables,
+    polls = scores,
+    poll_codes = score_codes,
+    partys = parties
   )
 }
 
 italian_legislator_18 <- import_itanian_politics("18")
 usethis::use_data(
   italian_legislator_18,
-  compress = "bzip2",
+  compress = "xz",
   overwrite = TRUE,
   version = 3
 )
@@ -431,7 +561,7 @@ usethis::use_data(
 italian_legislator_17 <- import_itanian_politics("17")
 usethis::use_data(
   italian_legislator_17,
-  compress = "bzip2",
+  compress = "xz",
   overwrite = TRUE,
   version = 3
 )

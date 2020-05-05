@@ -1,32 +1,29 @@
+
 library("tidyverse")
 library("readxl")
-library("jsonlite")
+library("httr")
 library("usethis")
+library("here")
 
 debug <- FALSE
-# Prepare
 
-# Download the swiss parlamentary xlsx file from <https://www.parlament.ch/de/ratsbetrieb/abstimmungen/abstimmung-nr-xls> into your *original-data_path* variable.
 
-## Download original data
-
-na_unique <- function(x){
-  result = unique(x[!is.na(x)])
+na_unique <- function(x) {
+  result <- unique(x[!is.na(x)])
   result
 }
 
 check_import_errors <- function(imported_data, g_id) {
-
   g_id <- enquo(g_id)
 
   grouped_data <-
     imported_data %>%
     group_by(!!g_id)
 
-  if (any(group_size(grouped_data) > 1)){
+  if (any(group_size(grouped_data) > 1)) {
     imported_data <-
       imported_data %>%
-      group_by(!!g_id, add= TRUE) %>%
+      group_by(!!g_id, add = TRUE) %>%
       filter(row_number() == 1)
     if (debug) {
       message(
@@ -39,242 +36,46 @@ check_import_errors <- function(imported_data, g_id) {
 }
 
 
-import_swiss_politics <- function(legislative_period, tmp_data_dir) {
+ws_api <- function(uri, params=c()) {
+  params[["format"]] <- "json"
+  params[["pretty"]] <- "true"
+  json <- NULL
+  get_data <- function(uri, params) {
+    if (debug) message(paste(uri, params, "\n"))
+    json <- GET(uri, query = params, add_headers("Accept"= "application/json", "accept-charset" = "utf-8"))
+    if (debug) message(json$url)
+    json <- content(json, "text")
 
-  votes_column_indeces <- list(
-    "d" = c("VoteRegistrationNumber", "VoteDate", "Rat", "Kommission",
-            "Dept.", "AffairId", "AffairTitle",
-         "VoteMeaningYes", "VoteMeaningNo",
-        "DivisionText", "VoteSubmissionText", "Decision", "Ja", "Nein", "Enth.",
-        "Entschuldigung gem. Art. 57 Abs. 4", "Hat nicht teilgenommen",
-        "Pr\u00e4sident"),
-    "f" = c("VoteRegistrationNumber", "VoteDate", "Conseil", "Commission",
-            "Dept.", "AffairId",
-            "AffairTitle",  "VoteMeaningYes",
-            "VoteMeaningNo", "DivisionText", "VoteSubmissionText", "Decision",
-            "Oui", "Non", "Abstenu", "Excus\u00e9", "Absent", "Pr\u00e9sident")
-,   "i" = c("VoteRegistrationNumber", "VoteDate", "Consiglio", "Commissione",
-            "Dept.", "AffairId",
-            "AffairTitle",  "VoteMeaningYes",
-            "VoteMeaningNo", "DivisionText", "VoteSubmissionText", "Decision",
-            "Si", "No", "Astenuto",  "Scusato", "Assente", "Presidente")
-  )
-
-  variables <- NULL
-  individuals <- NULL
-  scores <- NULL
-
-  file_list <- list.files(tmp_data_dir,
-                         pattern = paste0(legislative_period, ".*.xlsx")
-  )
-
-  for (filename in file_list ) {
-    filepath <- paste0(tmp_data_dir, "/", filename)
-    if (debug) {
-      message(paste("Importing filename.", filepath))
+    if (stringr::str_ends(json, fixed("\"hasMorePages\": true\r\n  }\r\n]"))) {
+      if ("pageNumber" %in% names(params)) {
+        params[["pageNumber"]] <- as.integer(params[["pageNumber"]]) + 1
+      } else {
+        params[["pageNumber"]] <- 2
+      }
+      json <- paste(stringr::str_sub(json, end = -2),",", stringr::str_sub(get_data(uri, params), start = 2))
     }
-    matches <- str_match(filename, "([0-9]+?)-([0-9]+?)-(.*?)-([a-z]+?)\\.xlsx")
-    session_code <- matches[,2]
-    session_year <- matches[,3]
-    session_name <- matches[,4]
-    language <- matches[,5]
-
-    if (debug) {
-      message("Importing variables.")
-    }
-    variables <-
-      read_xlsx(filepath, skip = 8) %>%
-        select(votes_column_indeces[[language]]) %>%
-        mutate(
-          SessionCode = session_code,
-          SessionYear = session_year,
-          SessionName = session_name,
-          AffairId = as.character(AffairId),
-          VoteDate = as.character(VoteDate),
-          VoteRegistrationNumber = as.character(VoteRegistrationNumber)
-        ) %>%
-        rename(v_id = VoteRegistrationNumber ) %>%
-        distinct(.keep_all = TRUE) %>%
-        arrange(v_id) %>%
-        {
-          if (is.null(variables)) {
-            .
-          } else {
-            full_join(
-              variables,
-              .,
-              by = c(
-                "v_id", "VoteDate", "Rat", "Kommission", "Dept.", "AffairId",
-                "AffairTitle", "VoteMeaningYes", "VoteMeaningNo",
-                "DivisionText", "VoteSubmissionText", "Decision", "Ja", "Nein",
-                "Enth.", "Entschuldigung gem. Art. 57 Abs. 4",
-                "Hat nicht teilgenommen", "Pr\u00e4sident", "SessionCode",
-                "SessionYear", "SessionName"
-              ),
-              suffix = c("",paste0(".",session_code))
-              )
-          }
-        }  %>%
-      arrange(v_id)
-
-    if (debug) {
-       message("Importing scores.")
-    }
-    scores <-
-      read_xlsx(filepath, skip = 8) %>%
-        select(-votes_column_indeces[[language]][
-          -which(votes_column_indeces[[language]] == "VoteRegistrationNumber")
-        ]) %>%
-        select(-"...12") %>%
-        pivot_longer( cols = -VoteRegistrationNumber, names_to = "i_id") %>%
-        distinct(.keep_all = TRUE) %>%
-        pivot_wider(
-          names_from = VoteRegistrationNumber,
-          values_from = value
-        ) %>%
-        arrange(i_id) %>%
-      {
-          if (is.null(scores)) {
-            .
-          } else {
-            full_join(
-              scores, .,
-              by = "i_id",
-              suffix = c("",paste0(".",session_code))
-            )
-          }
-        } %>%
-      arrange(i_id)
-
-    if (debug) {
-      message("Importing individuals.")
-    }
-    individuals <-
-      read_xlsx(filepath, n_max=7) %>%
-      select(-starts_with("...")) %>%
-      bind_rows(rlang::set_names(colnames(.), colnames(.))) %>%
-      pivot_longer(-CouncillorId, names_to = "i_id") %>%
-      distinct(.keep_all = TRUE) %>%
-      pivot_wider(names_from = CouncillorId, values_from = value) %>%
-      mutate(Geburtsdatum = as.character(Geburtsdatum)) %>%
-      select(-CouncillorId) %>%
-      rename(
-        bio_id = CouncillorBioId,
-        name = CouncillorName,
-        parlamentary_group = Fraktion,
-        region = Kanton,
-        chamber = Rat,
-        birth_date = Geburtsdatum,
-        swore_date = Vereidigungsdatum
-      ) %>%
-      arrange(i_id) %>%
-      {
-          if (is.null(individuals)) {
-            .
-          } else {
-            full_join(
-              individuals, .,
-              by =  c(
-                "i_id", "bio_id", "name", "chamber", "parlamentary_group",
-                "region", "birth_date", "swore_date"
-              ),
-              suffix = c("", paste0(".",session_code)) )
-          }
-        } %>%
-      arrange(i_id)
+    json
   }
-
-  variables <-
-    variables %>%
-    check_import_errors(v_id)
-
-  individuals <-
-    individuals %>%
-    check_import_errors(i_id)
-
-  scores <-
-    scores %>%
-    check_import_errors(i_id)
-
-  # Councillors
-
-  individuals_ws = NULL
-  for (bio_id in unique(lapply(individuals$bio_id, as.character))) {
-    uri = paste0(
-      "http://ws-old.parlament.ch/councillors/",
-      bio_id,
-      "?nativeLanguageFilter=false&format=json"
-    )
-    individuals_ws <-
-      fromJSON(uri) %>%
-      enframe() %>%
-      mutate(bio_id = bio_id) %>%
-      pivot_wider(names_from = name, values_from = value) %>%
-      {
-        if (is.null(individuals_ws)) {
-          .
-        } else {
-          bind_rows(individuals_ws, .)
-        }
-      } %>%
-      tibble()
-  }
-
-  individuals <- full_join(
-    individuals,
-    individuals_ws,
-    by = "bio_id",
-    suffix = c("", ".ws")
-  )
-  rm(individuals_ws)
-
-  # Scores
-
-  score_coding <- c(
-      "Nein"  = 0, "No"  = 0, "Non"  = 0, "Ja" = 1, "Si" = 1, "Oui" = 1,
-      "Enthaltung" = 2, "Astensione" = 2, "Abstention" = 2,
-      "Der Pr\u00e4sident stimmt nicht" = 3, "Pr\u00e9sident ne vote pas" = 3,
-      "Presidente non voto" = 3,
-      "Entschuldigt" = 4, "Excus\u00e9" = 4, "Scusato" = 4,
-      "NA"  = 5,
-      "Hat nicht teilgenommen" = 6, "N'a pas particip\u00e9" = 6,
-      "Non ha partecipato" = 6
-    )
-
-
-  if (debug) {
-    values_sparql <- "SELECT DISTINCT ?infoAssenza ?espressione
-      (COALESCE(?infoAssenza, ?espressione) as ?score)
-      WHERE {
-        ?vote ocd:rif_votazione [a ocd:votazione].
-        OPTIONAL{ ?vote dc:type ?espressione}
-        OPTIONAL{ ?vote dc:description ?infoAssenza}
-    }"
-
-    get.sparql_query_result(values_sparql) %>%
-      tibble() %>%
-      mutate( code = recode(score, !!!score_coding)) %>%
-      arrange(code)
-  }
-
-
-  # Checks and errors
-
-  individuals <-
-    individuals %>%
-    mutate(has_scores = (i_id %in% scores$i_id))
-
-  list(
-    individuals = individuals,
-    variables = variables,
-    scores = scores,
-    score_codes = score_coding
-  )
+  if (debug) message("returning fetched json as tibble")
+  jsonlite::fromJSON(get_data(uri,params), simplifyDataFrame = FALSE, flatten = FALSE) %>%
+    tibble() %>% `colnames<-`("entries") %>%  unnest_wider(entries)
 }
+
+as_matrix <- function(x, rownames_column){
+  rownames_column <- enquo(rownames_column)
+  if (!tibble::is_tibble(x)) stop("x must be a tibble")
+  x <- x %>% select(sort(names(.))) %>% arrange(!!rownames_column)
+  x <- column_to_rownames(x, quo_name(rownames_column))
+  y <- as.matrix.data.frame(x)
+  colnames(y) <- colnames(x)
+  rownames(y) <- rownames(x)
+  y
+}
+
 
 # Download data files ----------------------------------------------------------
 
-urls = c(
+urls <- c(
   "https://www.parlament.ch/centers/documents/de/5102-2020-fruehjahrssession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5101-2019-wintersession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/parlament_export_session_5019_de_CH.xlsx",
@@ -319,41 +120,406 @@ urls = c(
 )
 
 # Create tmporary directory
-tmp_data_dir <- tempdir()
+tmp_data_dir <- tempdir(check=TRUE)
 
 for (url in urls) {
-  if (basename(url) == "5012-218-fruehjahrssession-d.xlsx" ) {
-    destfile <-  "5012-2018-fruehjahrssession-d.xlsx"
+  if (basename(url) == "5012-218-fruehjahrssession-d.xlsx") {
+    destfile <- "5012-2018-fruehjahrssession-d.xlsx"
   } else
-    if (basename(url) == "parlament_export_session_5019_de_CH.xlsx" ) {
+    if (basename(url) == "parlament_export_session_5019_de_CH.xlsx") {
       destfile <- "5019-2019-herbstsession-d.xlsx"
     } else {
       destfile <- basename(url)
     }
 
-  destfile = paste0(tmp_data_dir,"/", destfile)
-  download.file(url, destfile, quiet = TRUE)
+  destfile <- file.path(tmp_data_dir, destfile)
+  if (basename(url) == "4920-2015-herbstsession-d.xlsx") {
+    file.copy(
+      file.path(here("raw_data"), "4920-2015-herbstsession-d.xlsx"),
+      destfile,
+      overwrite = TRUE
+    )
+  } else {
+    download.file(url, destfile, quiet = TRUE)
+  }
+}
+
+
+
+import_swiss_politics <- function(legislative_period, tmp_data_dir) {
+
+  file_list <- list.files(tmp_data_dir,
+    pattern = paste0(legislative_period, ".*.xlsx")
+  )
+
+  # variables ------------------------------------------------------------------
+  if (debug)  message("Importing variables.")
+
+  variables <- NULL
+
+  votes_column_indeces <- c(
+    "VoteRegistrationNumber", "VoteDate", "Rat", "Kommission",
+    "Dept.", "AffairId", "AffairTitle",
+    "VoteMeaningYes", "VoteMeaningNo",
+    "DivisionText", "VoteSubmissionText"
+  )
+
+  for (filename in file_list) {
+    filepath <- paste0(tmp_data_dir, "/", filename)
+    if (debug) message(paste("Importing filename.", filepath))
+
+    matches <- str_match(filename, "([0-9]+?)-([0-9]+?)-(.*?)-([a-z]+?)\\.xlsx")
+    session_code <- matches[, 2]
+    session_year <- matches[, 3]
+    session_name <- matches[, 4]
+    language <- matches[, 5]
+
+    variables <-
+      read_xlsx(filepath, skip = 8) %>%
+      select(all_of(votes_column_indeces)) %>%
+      rename(
+        v_id = VoteRegistrationNumber,
+        vote_date = VoteDate,
+      ) %>%
+      mutate(
+        v_id = as.character(v_id),
+        vote_date = as.character(vote_date),
+        AffairId = as.character(AffairId)
+      ) %>%
+      pivot_longer(cols = -v_id) %>%
+     mutate(
+       session_code = session_code
+     ) %>%
+      {
+        if (is.null(variables)) {
+          .
+        } else {
+          bind_rows(
+            variables,
+            .
+          )
+        }
+      }
+  }
+  variables <-
+    variables %>%
+    distinct(.keep_all = TRUE) %>%
+    pivot_wider(names_from = name, values_from = value) %>%
+    arrange(v_id) %>%
+    type_convert(
+      cols(
+        v_id = col_character(),
+        session_code = col_integer(),
+        vote_date = col_datetime(format = ""),
+        Rat = col_character(),
+        Kommission = col_character(),
+        Dept. = col_character(),
+        AffairId = col_character(),
+        AffairTitle = col_character(),
+        VoteMeaningYes = col_character(),
+        VoteMeaningNo = col_character(),
+        DivisionText = col_character(),
+        VoteSubmissionText = col_character()
+      )
+    ) %>% rename(
+      affair_id = AffairId,
+      affair_title = AffairTitle,
+      committee = Kommission,
+      concernes_department = Dept.,
+      meaning_yes = VoteMeaningYes,
+      meaning_no = VoteMeaningNo,
+      vote_type = DivisionText,
+      vote_text = VoteSubmissionText
+    ) %>% select(-Rat)
+
+
+  # Scores ---------------------------------------------------------------------
+  if (debug) message("Importing scores.")
+  scores <- NULL
+
+  not_scores_column_indeces = c(
+    votes_column_indeces[
+      -which(votes_column_indeces == "VoteRegistrationNumber")
+    ], "Decision", "Ja", "Nein", "Enth.",
+    "Entschuldigung gem. Art. 57 Abs. 4", "Hat nicht teilgenommen",
+    "Pr\u00e4sident"
+  )
+
+  for (filename in file_list) {
+    filepath <- paste0(tmp_data_dir, "/", filename)
+    if (debug) message(paste("Importing filename.", filepath))
+
+    matches <- str_match(filename, "([0-9]+?)-([0-9]+?)-(.*?)-([a-z]+?)\\.xlsx")
+    session_code <- matches[, 2]
+    session_year <- matches[, 3]
+    session_name <- matches[, 4]
+    language <- matches[, 5]
+
+    scores <-
+      read_xlsx(filepath, skip = 8) %>%
+      select(-all_of(not_scores_column_indeces)) %>%
+      select(-"...12") %>%
+      pivot_longer(cols = -VoteRegistrationNumber, names_to = "i_id") %>%
+      distinct(.keep_all = TRUE) %>%
+      pivot_wider(
+        names_from = VoteRegistrationNumber,
+        values_from = value
+      ) %>%
+      arrange(i_id) %>%
+      {
+        if (is.null(scores)) {
+          .
+        } else {
+          full_join(
+            scores, .,
+            by = "i_id",
+            suffix = c("", paste0(".", session_code))
+          )
+        }
+      } %>%
+      arrange(i_id)
+  }
+
+  # Individuals ----------------------------------------------------------------
+  if (debug) message("Importing individuals.")
+  individuals <- NULL
+
+  for (filename in file_list) {
+
+    filepath <- paste0(tmp_data_dir, "/", filename)
+    if (debug) message(paste("Importing filename.", filepath))
+
+    matches <- str_match(filename, "([0-9]+?)-([0-9]+?)-(.*?)-([a-z]+?)\\.xlsx")
+    session_code <- matches[, 2]
+    session_year <- matches[, 3]
+    session_name <- matches[, 4]
+    language <- matches[, 5]
+
+    individuals <-
+      read_xlsx(filepath, n_max = 7) %>%
+      select(-starts_with("...")) %>%
+      bind_rows(rlang::set_names(colnames(.), colnames(.))) %>%
+      pivot_longer(-CouncillorId, names_to = "c_id") %>%
+      rename(name = CouncillorId) %>%
+      select(c_id, name, value) %>%
+      mutate(
+        c_id = as.character(c_id),
+        session_code = session_code
+      ) %>%
+      distinct(.keep_all = TRUE) %>%
+      {
+        if (is.null(individuals)) {
+          .
+        } else {
+          bind_rows(
+            individuals,
+            .
+          )
+        }
+      } %>%
+      distinct(.keep_all = TRUE) %>%
+      arrange(c_id)
+  }
+
+  individuals <-
+    individuals %>% pivot_wider(c(c_id, session_code))
+
+  sessions <-
+    individuals %>%
+    select(session_code) %>%
+    distinct() %>%
+    unlist(use.names = FALSE)
+
+  individuals <-
+    individuals %>%
+    distinct(c_id, CouncillorBioId, CouncillorName,.keep_all = TRUE) %>%
+    mutate(uri = paste0(
+      "http://ws-old.parlament.ch/councillors/",
+      CouncillorBioId
+    )) %>%
+    mutate(i_id = as.integer(CouncillorBioId))  %>%
+    select(i_id, c_id, uri, CouncillorName)
+
+
+  # Councillors Web Service ----------------------------------------------------
+
+  individuals_ws <- ws_api("http://ws-old.parlament.ch/councillors/historic", list(legislativePeriodFromFilter = legislative_period))
+
+  individuals_ws <-
+    individuals_ws %>%
+    rename(
+      i_id = id,
+      home_place = placeOfCitizenship,
+      birth_date = birthDate,
+      death_date = dateOfDeath,
+      first_name = firstName,
+      last_name = lastName
+    ) %>%
+    select( -`function`, -hasMorePages, -council, -ends_with("Mask"), -updated) %>%
+    unnest_wider(party) %>%
+    rename(party_name = abbreviation,) %>%
+    select(-id) %>%
+    unnest_wider(canton) %>%
+    select(-code, -id) %>%
+    rename(canton = abbreviation) %>%
+    unnest_wider(faction) %>%
+    rename(faction = abbreviation) %>%
+    select(-id) %>%
+    unnest_wider(membership) %>%
+    select(-id) %>%
+    distinct(.keep_all =TRUE) %>%
+    mutate(time = as.Date(leavingDate) - as.Date(entryDate)) %>%
+    mutate(start_date = entryDate, end_date = leavingDate) %>%
+    nest(party=c(party_name, start_date, end_date)) %>%
+    mutate(start_date = entryDate, end_date = leavingDate) %>%
+    nest(faction=c(faction, start_date, end_date)) %>%
+    rename(
+      start_mandate = entryDate,
+      end_mandate = leavingDate
+   )
+
+  membership_beginnings <-
+  individuals_ws %>%
+    group_by(i_id) %>%
+    summarise_at(vars(start_mandate), min) %>%
+    distinct(.keep_all=TRUE)
+
+   end_mandateings <-
+    individuals_ws %>%
+    group_by(i_id) %>%
+    summarise_at(vars(end_mandate), max) %>%
+    distinct(.keep_all=TRUE)
+
+   factions <-
+     individuals_ws %>%
+     select(i_id, faction) %>%
+     unnest(faction) %>%
+     distinct(.keep_all=TRUE) %>%
+     type_convert(
+       cols(
+         faction = col_character(),
+         start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
+         end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
+       )
+     ) %>%
+     group_by(i_id) %>%
+     group_nest() %>%
+     rename(factions = data)
+
+   parties <-
+     individuals_ws %>%
+     select(i_id, party) %>%
+     unnest(party) %>%
+     distinct(.keep_all = TRUE) %>%
+     type_convert(
+       cols(
+       party_name = col_character(),
+       start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
+       end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
+       )
+     ) %>%
+     group_by(i_id) %>%
+     group_nest() %>%
+     rename(parties = data)
+
+   individuals <-
+    individuals_ws %>%
+    select(-party, -faction, -start_mandate, -end_mandate, -time) %>%
+    distinct(.keep_all = TRUE) %>%
+    inner_join(parties,., by="i_id") %>%
+    inner_join(factions,., by="i_id") %>%
+    inner_join(membership_beginnings,., by="i_id") %>%
+    inner_join(end_mandateings,., by="i_id") %>%
+    arrange(i_id) %>%
+    full_join(
+      individuals,
+      .,
+      by = "i_id",
+      suffix = c("", ".ws")
+    ) %>%
+    ungroup()
+
+  rm(individuals_ws)
+
+  # indicate individuals with no scores
+  individuals <-
+    individuals %>%
+    mutate(has_scores = i_id %in% as.character(scores$i_id)) %>%
+    select(-CouncillorName) %>%
+    type_convert(
+      cols(
+        c_id = col_integer(),
+        uri = col_character(),
+        first_name = col_character(),
+        last_name = col_character(),
+        canton = col_character(),
+        home_place = col_character(),
+        gender = col_character(),
+        birth_date = col_date(format = "%Y-%m-%dT00:00:00Z"),
+        death_date = col_date(format = "%Y-%m-%dT00:00:00Z"),
+        end_mandate = col_date(format = "%Y-%m-%dT00:00:00Z"),
+        start_mandate = col_date(format = "%Y-%m-%dT00:00:00Z")
+      )
+    ) %>% select(i_id, c_id, uri, first_name, last_name, birth_date, death_date, gender, home_place, parties, factions, canton,  start_mandate, end_mandate, has_scores)
+
+  # Scores
+  score_codes <- c(
+    "Nein" = 0,
+    "Ja" = 1,
+    "Enthaltung" = 2,
+    "Der Pr\u00e4sident stimmt nicht" = 3,
+    "Entschuldigt" = 4,
+    "NA" = 5,
+    "Hat nicht teilgenommen" = 6
+  )
+
+  # Recode ---------------------------------------------------------------------
+  if (debug) message("recode scores")
+  scores <-
+  scores %>%
+    mutate_at(vars(-i_id), ~replace_na(., "NA")) %>%
+    mutate_at(vars(-i_id), ~recode(., !!!score_codes)) %>%
+    mutate_at(vars(-i_id), as.integer) %>%
+    as_matrix(i_id)
+
+
+  score_codes <- c(
+    `0` = "No",
+    `1` = "Yes",
+    `2` = "Abstention",
+    `3` = "The president is not voting",
+    `4` = "Excused",
+    `5` = "NA",
+    `6` = "Did not participate"
+  )
+
+  if (debug) message("return")
+  list(
+    members_of_parliment = individuals,
+    voting_items = variables,
+    polls = scores,
+    poll_codes = score_codes
+  )
 }
 
 
 # Import data for legislative periods 17 and 18  -------------------------------
 
-swiss_legislator_49 = import_swiss_politics("17", tmp_data_dir)
+swiss_legislator_49 <- import_swiss_politics("49", tmp_data_dir)
 usethis::use_data(
   swiss_legislator_49,
-  compress = "bzip2",
+  compress = "xz",
   overwrite = TRUE,
   version = 3
 )
 
-swiss_legislator_50 = import_swiss_politics("18", tmp_data_dir)
+swiss_legislator_50 <- import_swiss_politics("50", tmp_data_dir)
 usethis::use_data(
   swiss_legislator_50,
-  compress = "bzip2",
+  compress = "xz",
   overwrite = TRUE,
   version = 3
 )
 
 # Clean  -----------------------------------------------------------------------
 unlink(tmp_data_dir)
-
