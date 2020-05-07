@@ -11,13 +11,15 @@ library("tools")
 library("tidyverse")
 library("SPARQL")
 
-debug = TRUE
+debug <- TRUE
 
 
-as_matrix <- function(x, rownames_column){
+as_matrix <- function(x, rownames_column) {
   rownames_column <- enquo(rownames_column)
   if (!tibble::is_tibble(x)) stop("x must be a tibble")
-  x <- x %>% select(sort(names(.))) %>% arrange(!!rownames_column)
+  x <- x %>%
+    select(sort(names(.))) %>%
+    arrange(!!rownames_column)
   x <- column_to_rownames(x, quo_name(rownames_column))
   y <- as.matrix.data.frame(x)
   colnames(y) <- colnames(x)
@@ -28,13 +30,12 @@ as_matrix <- function(x, rownames_column){
 get.sparql_query_result <-
   function(query,
            endpoint = "http://dati.camera.it/sparql",
-           options = "format=application/sparql-results+xml"
-  ) {
+           options = "format=application/sparql-results+xml") {
     query_result <- SPARQL(url = endpoint, query = query, extra = options)
     tibble(query_result$results)
   }
 
-individuals_sparql <-  "
+individuals_sparql <- "
   SELECT DISTINCT
     ?i_id
     ?councillor_uri
@@ -118,7 +119,7 @@ WHERE {
 }
 "
 
-individuals_mandates_sparql <-  "
+individuals_mandates_sparql <- "
 SELECT DISTINCT ?i_id ?electoral_district ?election_list ?election_date
   ?start_mandate ?end_mandate ?end_motive
 WHERE {
@@ -269,7 +270,7 @@ region_codes <- c(
   "LOMBARDIA 1 - 04" = "LOM1", "LOMBARDIA 1" = "LOM1", "SARDEGNA - 01" = "SAR",
   "LOMBARDIA 2 - 01" = "LOM2", "LOMBARDIA 2 - 02" = "LOM2", "PUGLIA" = "PUG",
   "LOMBARDIA 2" = "LOM2", "LOMBARDIA 3 - 01" = "LOM3", "SARDEGNA - 02" = "SAR",
-  "LOMBARDIA 3 - 02" = "LOM3", "LOMBARDIA 3" = "LOM3",  "SARDEGNA" = "SAR",
+  "LOMBARDIA 3 - 02" = "LOM3", "LOMBARDIA 3" = "LOM3", "SARDEGNA" = "SAR",
   "LOMBARDIA 4 - 01" = "LOM4", "LOMBARDIA 4 - 02" = "LOM4",
   "MARCHE - 01" = "MAR", "MARCHE - 02" = "MAR", "MARCHE" = "MAR",
   "MOLISE - 01" = "MOL", "MOLISE" = "MOL", "PIEMONTE 1 - 01" = "PIE1",
@@ -324,7 +325,7 @@ import_itanian_politics <- function(legislative_period) {
   if (debug) message("collect individuals_mandates")
   individuals_mandates <-
     sprintf(individuals_mandates_sparql, legislative_period) %>%
-    get.sparql_query_result()  %>%
+    get.sparql_query_result() %>%
     mutate(
       region = recode(electoral_district, !!!region_codes)
     ) %>%
@@ -332,34 +333,34 @@ import_itanian_politics <- function(legislative_period) {
     nest()
 
   if (debug) message("collect individuals")
-   individuals <-
+  individuals <-
     sprintf(individuals_sparql, legislative_period) %>%
     get.sparql_query_result() %>%
     arrange(i_id) %>%
     full_join(individuals_parties, by = "i_id") %>%
-    full_join(individuals_mandates, by = "i_id")  %>%
+    full_join(individuals_mandates, by = "i_id") %>%
     unnest(data.y) %>%
-    rename(parties = data.x)  %>%
-     mutate(
-       first_name = toTitleCase(tolower(first_name)),
-       last_name = toTitleCase(tolower(last_name)),
-       birth_place =  toTitleCase(tolower(birth_place))
-     ) %>%
+    rename(parties = data.x) %>%
+    mutate(
+      first_name = toTitleCase(tolower(first_name)),
+      last_name = toTitleCase(tolower(last_name)),
+      birth_place = toTitleCase(tolower(birth_place))
+    ) %>%
     type_convert(cols(
       i_id = col_character(),
       councillor_uri = col_character(),
       first_name = col_character(),
       last_name = col_character(),
       info = col_character(),
-      birth_date = col_date(format = "%Y%m%d" ),
+      birth_date = col_date(format = "%Y%m%d"),
       birth_place = col_character(),
-      death_date = col_date(format = "%Y%m%d" ),
+      death_date = col_date(format = "%Y%m%d"),
       gender = col_factor(),
       electoral_district = col_character(),
       election_list = col_character(),
-      election_date = col_date(format = "%Y%m%d" ),
-      start_mandate = col_date(format = "%Y%m%d" ),
-      end_mandate = col_date(format = "%Y%m%d" ),
+      election_date = col_date(format = "%Y%m%d"),
+      start_mandate = col_date(format = "%Y%m%d"),
+      end_mandate = col_date(format = "%Y%m%d"),
       end_motive = col_character(),
       region = col_character()
     )) %>%
@@ -369,27 +370,28 @@ import_itanian_politics <- function(legislative_period) {
 
   # Votes ----------------------------------------------------------------------
   if (debug) message("collect variables")
-  limit = 10000
+  limit <- 10000
   variables <- NULL
   iter <- 0
   trys <- 10
   repeat {
-      query_result <- tryCatch(
-        {
-          sparql_query <- sprintf(votes_sparql, legislative_period, limit, iter * limit)
-          get.sparql_query_result(sparql_query)
-        }, error = function(e) {
-          warning(paste("Retrying with offset:", iter * limit, "\n"))
-          message(sparql_query)
-          message(e)
-          trys <- trys - 1
-          Sys.sleep(120)
+    query_result <- tryCatch(
+      {
+        sparql_query <- sprintf(votes_sparql, legislative_period, limit, iter * limit)
+        get.sparql_query_result(sparql_query)
+      },
+      error = function(e) {
+        warning(paste("Retrying with offset:", iter * limit, "\n"))
+        message(sparql_query)
+        message(e)
+        trys <- trys - 1
+        Sys.sleep(120)
       }
     )
 
 
     if (inherits(query_result, "error")) {
-      if(trys > 0) {
+      if (trys > 0) {
         next
       }
       stop(query_result)
@@ -415,7 +417,6 @@ import_itanian_politics <- function(legislative_period) {
       arrange(v_id)
 
     iter <- iter + 1
-
   }
   variables <-
     variables %>%
@@ -426,7 +427,7 @@ import_itanian_politics <- function(legislative_period) {
     ) %>%
     type_convert(cols(
       v_id = col_character(),
-      date = col_date(format = "%Y%m%d" ),
+      date = col_date(format = "%Y%m%d"),
       type = col_factor(),
       act_id = col_character(),
       act_type = col_factor(),
@@ -450,11 +451,11 @@ import_itanian_politics <- function(legislative_period) {
 
     query_result <- tryCatch(
       {
-          get.sparql_query_result(sparql_query)
+        get.sparql_query_result(sparql_query)
       },
       error = function(e) {
-          warning(sprintf("Retrying with offset: %i\n", limit * iter))
-          message(sparql_query)
+        warning(sprintf("Retrying with offset: %i\n", limit * iter))
+        message(sparql_query)
         print(e)
         trys <- trys - 1
         Sys.sleep(120)
@@ -462,7 +463,7 @@ import_itanian_politics <- function(legislative_period) {
     )
 
     if (inherits(query_result, "error")) {
-      if(trys > 0){
+      if (trys > 0) {
         next
       }
       stop(query_result)
@@ -533,9 +534,9 @@ import_itanian_politics <- function(legislative_period) {
   }
 
   scores <-
-  scores %>%
-    mutate_at(vars(-i_id), ~replace_na(., "NA")) %>%
-    mutate_at(vars(-i_id), ~recode(., !!!score_codes)) %>%
+    scores %>%
+    mutate_at(vars(-i_id), ~ replace_na(., "NA")) %>%
+    mutate_at(vars(-i_id), ~ recode(., !!!score_codes)) %>%
     mutate_at(vars(-i_id), as.integer) %>%
     as_matrix(i_id)
 

@@ -36,13 +36,13 @@ check_import_errors <- function(imported_data, g_id) {
 }
 
 
-ws_api <- function(uri, params=c()) {
+ws_api <- function(uri, params = c()) {
   params[["format"]] <- "json"
   params[["pretty"]] <- "true"
   json <- NULL
   get_data <- function(uri, params) {
     if (debug) message(paste(uri, params, "\n"))
-    json <- GET(uri, query = params, add_headers("Accept"= "application/json", "accept-charset" = "utf-8"))
+    json <- GET(uri, query = params, add_headers("Accept" = "application/json", "accept-charset" = "utf-8"))
     if (debug) message(json$url)
     json <- content(json, "text")
 
@@ -52,19 +52,23 @@ ws_api <- function(uri, params=c()) {
       } else {
         params[["pageNumber"]] <- 2
       }
-      json <- paste(stringr::str_sub(json, end = -2),",", stringr::str_sub(get_data(uri, params), start = 2))
+      json <- paste(stringr::str_sub(json, end = -2), ",", stringr::str_sub(get_data(uri, params), start = 2))
     }
     json
   }
   if (debug) message("returning fetched json as tibble")
-  jsonlite::fromJSON(get_data(uri,params), simplifyDataFrame = FALSE, flatten = FALSE) %>%
-    tibble() %>% `colnames<-`("entries") %>%  unnest_wider(entries)
+  jsonlite::fromJSON(get_data(uri, params), simplifyDataFrame = FALSE, flatten = FALSE) %>%
+    tibble() %>%
+    `colnames<-`("entries") %>%
+    unnest_wider(entries)
 }
 
-as_matrix <- function(x, rownames_column){
+as_matrix <- function(x, rownames_column) {
   rownames_column <- enquo(rownames_column)
   if (!tibble::is_tibble(x)) stop("x must be a tibble")
-  x <- x %>% select(sort(names(.))) %>% arrange(!!rownames_column)
+  x <- x %>%
+    select(sort(names(.))) %>%
+    arrange(!!rownames_column)
   x <- column_to_rownames(x, quo_name(rownames_column))
   y <- as.matrix.data.frame(x)
   colnames(y) <- colnames(x)
@@ -120,17 +124,17 @@ urls <- c(
 )
 
 # Create tmporary directory
-tmp_data_dir <- tempdir(check=TRUE)
+tmp_data_dir <- tempdir(check = TRUE)
 
 for (url in urls) {
   if (basename(url) == "5012-218-fruehjahrssession-d.xlsx") {
     destfile <- "5012-2018-fruehjahrssession-d.xlsx"
   } else
-    if (basename(url) == "parlament_export_session_5019_de_CH.xlsx") {
-      destfile <- "5019-2019-herbstsession-d.xlsx"
-    } else {
-      destfile <- basename(url)
-    }
+  if (basename(url) == "parlament_export_session_5019_de_CH.xlsx") {
+    destfile <- "5019-2019-herbstsession-d.xlsx"
+  } else {
+    destfile <- basename(url)
+  }
 
   destfile <- file.path(tmp_data_dir, destfile)
   if (basename(url) == "4920-2015-herbstsession-d.xlsx") {
@@ -147,13 +151,12 @@ for (url in urls) {
 
 
 import_swiss_politics <- function(legislative_period, tmp_data_dir) {
-
   file_list <- list.files(tmp_data_dir,
     pattern = paste0(legislative_period, ".*.xlsx")
   )
 
   # variables ------------------------------------------------------------------
-  if (debug)  message("Importing variables.")
+  if (debug) message("Importing variables.")
 
   variables <- NULL
 
@@ -187,9 +190,9 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
         AffairId = as.character(AffairId)
       ) %>%
       pivot_longer(cols = -v_id) %>%
-     mutate(
-       session_code = session_code
-     ) %>%
+      mutate(
+        session_code = session_code
+      ) %>%
       {
         if (is.null(variables)) {
           .
@@ -221,7 +224,8 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
         DivisionText = col_character(),
         VoteSubmissionText = col_character()
       )
-    ) %>% rename(
+    ) %>%
+    rename(
       affair_id = AffairId,
       affair_title = AffairTitle,
       committee = Kommission,
@@ -230,14 +234,15 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
       meaning_no = VoteMeaningNo,
       vote_type = DivisionText,
       vote_text = VoteSubmissionText
-    ) %>% select(-Rat)
+    ) %>%
+    select(-Rat)
 
 
   # Scores ---------------------------------------------------------------------
   if (debug) message("Importing scores.")
   scores <- NULL
 
-  not_scores_column_indeces = c(
+  not_scores_column_indeces <- c(
     votes_column_indeces[
       -which(votes_column_indeces == "VoteRegistrationNumber")
     ], "Decision", "Ja", "Nein", "Enth.",
@@ -285,7 +290,6 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
   individuals <- NULL
 
   for (filename in file_list) {
-
     filepath <- paste0(tmp_data_dir, "/", filename)
     if (debug) message(paste("Importing filename.", filepath))
 
@@ -332,12 +336,12 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
 
   individuals <-
     individuals %>%
-    distinct(c_id, CouncillorBioId, CouncillorName,.keep_all = TRUE) %>%
+    distinct(c_id, CouncillorBioId, CouncillorName, .keep_all = TRUE) %>%
     mutate(uri = paste0(
       "http://ws-old.parlament.ch/councillors/",
       CouncillorBioId
     )) %>%
-    mutate(i_id = as.integer(CouncillorBioId))  %>%
+    mutate(i_id = as.integer(CouncillorBioId)) %>%
     select(i_id, c_id, uri, CouncillorName)
 
 
@@ -355,9 +359,9 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
       first_name = firstName,
       last_name = lastName
     ) %>%
-    select( -`function`, -hasMorePages, -council, -ends_with("Mask"), -updated) %>%
+    select(-`function`, -hasMorePages, -council, -ends_with("Mask"), -updated) %>%
     unnest_wider(party) %>%
-    rename(party_name = abbreviation,) %>%
+    rename(party_name = abbreviation, ) %>%
     select(-id) %>%
     unnest_wider(canton) %>%
     select(-code, -id) %>%
@@ -367,69 +371,69 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
     select(-id) %>%
     unnest_wider(membership) %>%
     select(-id) %>%
-    distinct(.keep_all =TRUE) %>%
+    distinct(.keep_all = TRUE) %>%
     mutate(time = as.Date(leavingDate) - as.Date(entryDate)) %>%
     mutate(start_date = entryDate, end_date = leavingDate) %>%
-    nest(party=c(party_name, start_date, end_date)) %>%
+    nest(party = c(party_name, start_date, end_date)) %>%
     mutate(start_date = entryDate, end_date = leavingDate) %>%
-    nest(faction=c(faction, start_date, end_date)) %>%
+    nest(faction = c(faction, start_date, end_date)) %>%
     rename(
       start_mandate = entryDate,
       end_mandate = leavingDate
-   )
+    )
 
   membership_beginnings <-
-  individuals_ws %>%
+    individuals_ws %>%
     group_by(i_id) %>%
     summarise_at(vars(start_mandate), min) %>%
-    distinct(.keep_all=TRUE)
+    distinct(.keep_all = TRUE)
 
-   end_mandateings <-
+  end_mandateings <-
     individuals_ws %>%
     group_by(i_id) %>%
     summarise_at(vars(end_mandate), max) %>%
-    distinct(.keep_all=TRUE)
+    distinct(.keep_all = TRUE)
 
-   factions <-
-     individuals_ws %>%
-     select(i_id, faction) %>%
-     unnest(faction) %>%
-     distinct(.keep_all=TRUE) %>%
-     type_convert(
-       cols(
-         faction = col_character(),
-         start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
-         end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
-       )
-     ) %>%
-     group_by(i_id) %>%
-     group_nest() %>%
-     rename(factions = data)
+  factions <-
+    individuals_ws %>%
+    select(i_id, faction) %>%
+    unnest(faction) %>%
+    distinct(.keep_all = TRUE) %>%
+    type_convert(
+      cols(
+        faction = col_character(),
+        start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
+        end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
+      )
+    ) %>%
+    group_by(i_id) %>%
+    group_nest() %>%
+    rename(factions = data)
 
-   parties <-
-     individuals_ws %>%
-     select(i_id, party) %>%
-     unnest(party) %>%
-     distinct(.keep_all = TRUE) %>%
-     type_convert(
-       cols(
-       party_name = col_character(),
-       start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
-       end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
-       )
-     ) %>%
-     group_by(i_id) %>%
-     group_nest() %>%
-     rename(parties = data)
+  parties <-
+    individuals_ws %>%
+    select(i_id, party) %>%
+    unnest(party) %>%
+    distinct(.keep_all = TRUE) %>%
+    type_convert(
+      cols(
+        party_name = col_character(),
+        start_date = col_datetime(format = "%Y-%m-%dT00:00:00Z"),
+        end_date = col_datetime(format = "%Y-%m-%dT00:00:00Z")
+      )
+    ) %>%
+    group_by(i_id) %>%
+    group_nest() %>%
+    rename(parties = data)
 
-   individuals <-
+  individuals <-
     individuals_ws %>%
     select(-party, -faction, -start_mandate, -end_mandate, -time) %>%
     distinct(.keep_all = TRUE) %>%
-    inner_join(parties,., by="i_id") %>%
-    inner_join(factions,., by="i_id") %>%
-    inner_join(membership_beginnings,., by="i_id") %>%
-    inner_join(end_mandateings,., by="i_id") %>%
+    inner_join(parties, ., by = "i_id") %>%
+    inner_join(factions, ., by = "i_id") %>%
+    inner_join(membership_beginnings, ., by = "i_id") %>%
+    inner_join(end_mandateings, ., by = "i_id") %>%
     arrange(i_id) %>%
     full_join(
       individuals,
@@ -460,7 +464,8 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
         end_mandate = col_date(format = "%Y-%m-%dT00:00:00Z"),
         start_mandate = col_date(format = "%Y-%m-%dT00:00:00Z")
       )
-    ) %>% select(i_id, c_id, uri, first_name, last_name, birth_date, death_date, gender, home_place, parties, factions, canton,  start_mandate, end_mandate, has_scores)
+    ) %>%
+    select(i_id, c_id, uri, first_name, last_name, birth_date, death_date, gender, home_place, parties, factions, canton, start_mandate, end_mandate, has_scores)
 
   # Scores
   score_codes <- c(
@@ -476,9 +481,9 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
   # Recode ---------------------------------------------------------------------
   if (debug) message("recode scores")
   scores <-
-  scores %>%
-    mutate_at(vars(-i_id), ~replace_na(., "NA")) %>%
-    mutate_at(vars(-i_id), ~recode(., !!!score_codes)) %>%
+    scores %>%
+    mutate_at(vars(-i_id), ~ replace_na(., "NA")) %>%
+    mutate_at(vars(-i_id), ~ recode(., !!!score_codes)) %>%
     mutate_at(vars(-i_id), as.integer) %>%
     as_matrix(i_id)
 

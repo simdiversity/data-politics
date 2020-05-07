@@ -1,3 +1,8 @@
+
+  [![Codecov test coverage](https://codecov.io/gh/simdiversity/data-politics/branch/master/graph/badge.svg)](https://codecov.io/gh/simdiversity/data-politics?branch=master)
+
+  [![R build status](https://github.com/simdiversity/data-politics/workflows/R-CMD-check/badge.svg)](https://github.com/simdiversity/data-politics/actions)
+
 # simdiversity.data.politics
 
 
@@ -21,3 +26,7 @@ devtools::install_github("simdiversity/data_politics")
 ```
 
 -----
+
+## Code of Conduct
+
+Please note that the simdiversity.data.politics project is released with a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). By contributing to this project, you agree to abide by its terms.
