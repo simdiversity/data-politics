@@ -441,11 +441,11 @@ import_itanian_politics <- function(legislative_period) {
   # Scores ---------------------------------------------------------------------
   if (debug) message("collect scores")
   party <- FALSE
-  limit <- 100
+  limit <- 600
   query <- ifelse(party, scores_party_sparql, scores_sparql)
   scores <- NULL
   iter <- 0
-  trys <- 10
+  trys <- 30
   repeat {
     sparql_query <- sprintf(query, legislative_period, limit, (limit * iter))
 
@@ -562,13 +562,13 @@ import_itanian_politics <- function(legislative_period) {
   )
 }
 
-# italian_legislator_18 <- import_itanian_politics("18")
-# usethis::use_data(
-#   italian_legislator_18,
-#   compress = "xz",
-#   overwrite = TRUE,
-#   version = 3
-# )
+italian_legislator_18 <- import_itanian_politics("18")
+usethis::use_data(
+  italian_legislator_18,
+  compress = "xz",
+  overwrite = TRUE,
+  version = 3
+)
 
 italian_legislator_17 <- import_itanian_politics("17")
 usethis::use_data(

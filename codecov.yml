@@ -1,5 +1,8 @@
 comment: false
 
+codecov:
+  token: 02569d01-d7a5-4783-bc8d-35d334c2408f
+
 coverage:
   status:
     project:
