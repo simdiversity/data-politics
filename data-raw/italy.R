@@ -97,8 +97,10 @@ WHERE {
 individuals_partys_sparql <- "
 SELECT DISTINCT ?i_id ?party_name ?start_date	?end_date
 WHERE {
-  ?councillor_uri a ocd:deputato; ocd:aderisce ?aderisce;
-       ocd:rif_leg <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>.
+  ?councillor_uri a ocd:deputato;
+      ocd:rif_mandatoCamera ?mandato;
+      ocd:aderisce ?aderisce;
+      ocd:rif_leg <http://dati.camera.it/ocd/legislatura.rdf/repubblica_%s>.
 
   ?aderisce ocd:rif_gruppoParlamentare ?gruppo.
 
@@ -230,10 +232,13 @@ scores_sparql <- "
     }
 
     ?vote_uri dc:identifier ?v_id.
-    OPTIONAL {
+
       ?voto ocd:rif_votazione ?vote_uri;
           ocd:rif_deputato ?councillor_uri.
-    }
+
+     FILTER EXISTS{?councillor_uri a ocd:deputato;
+          ocd:rif_mandatoCamera ?mandato.}
+
 
     OPTIONAL {?voto dc:type ?espressione}
     OPTIONAL {?voto dc:description ?infoAssenza}
@@ -376,15 +381,18 @@ import_itanian_politics <- function(legislative_period) {
         }, error = function(e) {
           warning(paste("Retrying with offset:", iter * limit, "\n"))
           message(sparql_query)
+          message(e)
           trys <- trys - 1
           Sys.sleep(120)
-          print(e)
       }
     )
 
 
     if (inherits(query_result, "error")) {
-      ifelse(trys > 0, next, stop(query_result))
+      if(trys > 0) {
+        next
+      }
+      stop(query_result)
     }
 
     if (nrow(query_result) == 0) {
@@ -432,7 +440,7 @@ import_itanian_politics <- function(legislative_period) {
   # Scores ---------------------------------------------------------------------
   if (debug) message("collect scores")
   party <- FALSE
-  limit <- 600
+  limit <- 100
   query <- ifelse(party, scores_party_sparql, scores_sparql)
   scores <- NULL
   iter <- 0
@@ -454,7 +462,10 @@ import_itanian_politics <- function(legislative_period) {
     )
 
     if (inherits(query_result, "error")) {
-      ifelse(trys > 0, next, stop(query_result))
+      if(trys > 0){
+        next
+      }
+      stop(query_result)
     }
 
     if (nrow(query_result) == 0) {
@@ -550,13 +561,13 @@ import_itanian_politics <- function(legislative_period) {
   )
 }
 
-italian_legislator_18 <- import_itanian_politics("18")
-usethis::use_data(
-  italian_legislator_18,
-  compress = "xz",
-  overwrite = TRUE,
-  version = 3
-)
+# italian_legislator_18 <- import_itanian_politics("18")
+# usethis::use_data(
+#   italian_legislator_18,
+#   compress = "xz",
+#   overwrite = TRUE,
+#   version = 3
+# )
 
 italian_legislator_17 <- import_itanian_politics("17")
 usethis::use_data(
