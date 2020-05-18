@@ -3,17 +3,19 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        make build
+	sh 'make install_deps'
+        sh 'make build'
       }
     }
     stage('Check') {
       steps {
-        make check
+	sh 'make install_deps'
+        sh  'make check'
       }
     }
     stage('Clean') {
       steps {
-        make clean
+        sh 'make clean'
       }
     }
   }
