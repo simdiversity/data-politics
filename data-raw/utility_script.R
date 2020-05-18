@@ -1,4 +1,6 @@
+library(here)
 
-tools::checkRdaFiles("data")
-tools::resaveRdaFiles("data")
-tools::checkRdaFiles("data")
+source(here("data-raw", "switzerland.R"))
+
+source(here("data-raw", "italy.R"))
+
