@@ -1,4 +1,3 @@
-
 # The italian parlamentary data is avilable on http://dati.camera.it in two distinct forms:
 #
 # 1. a SPARQL endpoint
@@ -314,13 +313,28 @@ import_itanian_politics <- function(legislative_period) {
     sprintf(party_names_sparql, legislative_period) %>%
     get.sparql_query_result()
 
+  if (debug) message("collect individuals")
+  legislative_period_end = "20180322"
+  if (legislative_period == "50") {
+    legislative_period_end = format(Sys.time(), "%Y%m%d")
+
+  }
+
   if (debug) message("collect individuals_parties")
   individuals_parties <-
     sprintf(individuals_partys_sparql, legislative_period) %>%
     get.sparql_query_result() %>%
     arrange(i_id) %>%
+    replace_na(list(end_date = legislative_period_end))  %>%
+    type_convert(cols(
+      i_id = col_character(),
+      start_date = col_date(format = "%Y%m%d"),
+      end_date = col_date(format = "%Y%m%d")
+    )) %>%
     group_by(i_id) %>%
     nest()
+
+
 
   if (debug) message("collect individuals_mandates")
   individuals_mandates <-
@@ -329,10 +343,17 @@ import_itanian_politics <- function(legislative_period) {
     mutate(
       region = recode(electoral_district, !!!region_codes)
     ) %>%
+    replace_na(list(end_mandate = legislative_period_end))  %>%
+    type_convert(cols(
+      i_id = col_character(),
+      start_date = col_date(format = "%Y%m%d"),
+      end_date = col_date(format = "%Y%m%d")
+    )) %>%
     group_by(i_id) %>%
     nest()
 
-  if (debug) message("collect individuals")
+
+
   individuals <-
     sprintf(individuals_sparql, legislative_period) %>%
     get.sparql_query_result() %>%
@@ -346,6 +367,7 @@ import_itanian_politics <- function(legislative_period) {
       last_name = toTitleCase(tolower(last_name)),
       birth_place = toTitleCase(tolower(birth_place))
     ) %>%
+    replace_na(list(end_mandate = legislative_period_end)) %>%
     type_convert(cols(
       i_id = col_character(),
       councillor_uri = col_character(),

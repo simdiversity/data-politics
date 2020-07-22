@@ -1,4 +1,6 @@
 
+
+
 library("tidyverse")
 library("readxl")
 library("httr")
@@ -151,6 +153,7 @@ for (url in urls) {
 
 
 import_swiss_politics <- function(legislative_period, tmp_data_dir) {
+
   file_list <- list.files(tmp_data_dir,
     pattern = paste0(legislative_period, ".*.xlsx")
   )
@@ -336,16 +339,22 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
 
   individuals <-
     individuals %>%
-    distinct(c_id, CouncillorBioId, CouncillorName, .keep_all = TRUE) %>%
+    distinct(c_id, CouncillorBioId, .keep_all = TRUE) %>%
     mutate(uri = paste0(
       "http://ws-old.parlament.ch/councillors/",
       CouncillorBioId
     )) %>%
     mutate(i_id = as.integer(CouncillorBioId)) %>%
-    select(i_id, c_id, uri, CouncillorName)
+    select(i_id, c_id, uri) %>%
+    distinct()
 
 
   # Councillors Web Service ----------------------------------------------------
+
+  legislative_period_end = "2015-09-25T00:00:00Z"
+  if (legislative_period == "50") {
+    legislative_period_end = "2019-09-27T00:00:00Z"
+  }
 
   individuals_ws <- ws_api("http://ws-old.parlament.ch/councillors/historic", list(legislativePeriodFromFilter = legislative_period))
 
@@ -372,6 +381,7 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
     unnest_wider(membership) %>%
     select(-id) %>%
     distinct(.keep_all = TRUE) %>%
+    replace_na(list(leavingDate = legislative_period_end)) %>%
     mutate(time = as.Date(leavingDate) - as.Date(entryDate)) %>%
     mutate(start_date = entryDate, end_date = leavingDate) %>%
     nest(party = c(party_name, start_date, end_date)) %>%
@@ -440,16 +450,16 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
       .,
       by = "i_id",
       suffix = c("", ".ws")
-    ) %>%
-    ungroup()
+    )
 
   rm(individuals_ws)
+
 
   # indicate individuals with no scores
   individuals <-
     individuals %>%
     mutate(has_scores = i_id %in% as.character(scores$i_id)) %>%
-    select(-CouncillorName) %>%
+    replace_na(list(end_mandate = legislative_period_end)) %>%
     type_convert(
       cols(
         c_id = col_integer(),
@@ -465,7 +475,9 @@ import_swiss_politics <- function(legislative_period, tmp_data_dir) {
         start_mandate = col_date(format = "%Y-%m-%dT00:00:00Z")
       )
     ) %>%
-    select(i_id, c_id, uri, first_name, last_name, birth_date, death_date, gender, home_place, parties, factions, canton, start_mandate, end_mandate, has_scores)
+    select(i_id, c_id, uri, first_name, last_name, birth_date, death_date,
+           gender, home_place, parties, factions, canton, start_mandate,
+           end_mandate, has_scores)
 
   # Scores
   score_codes <- c(
