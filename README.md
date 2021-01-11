@@ -14,8 +14,6 @@ This package contains four datasets
 
 * `italian_legislator_17`: 
 
-It also includes the following data set from the US Census:
-
 * `italian_legislator_18`: 
 
 ## Installation
