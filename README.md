@@ -1,5 +1,4 @@
-[![DOI](https://zenodo.org/badge/259206119.svg)](https://zenodo.org/badge/latestdoi/259206119)
-
+[![DOI](https://zenodo.org/badge/259206119.svg)](https://zenodo.org/badge/latestdoi/259206119) ![R-CMD-check](https://github.com/simdiversity/data-politics/workflows/R-CMD-check/badge.svg)
 # simdiversity.data.politics
 
 
