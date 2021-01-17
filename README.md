@@ -1,4 +1,4 @@
-  [![R build status](https://github.com/simdiversity/data-politics/workflows/R-CMD-check/badge.svg)](https://github.com/simdiversity/data-politics/actions)
+[![DOI](https://zenodo.org/badge/259206119.svg)](https://zenodo.org/badge/latestdoi/259206119)
 
 # simdiversity.data.politics
 
