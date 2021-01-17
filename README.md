@@ -1,6 +1,3 @@
-
-  [![Codecov test coverage](https://codecov.io/gh/simdiversity/data-politics/branch/master/graph/badge.svg)](https://codecov.io/gh/simdiversity/data-politics?branch=master)
-
   [![R build status](https://github.com/simdiversity/data-politics/workflows/R-CMD-check/badge.svg)](https://github.com/simdiversity/data-politics/actions)
 
 # simdiversity.data.politics
