@@ -129,15 +129,9 @@ urls <- c(
 tmp_data_dir <- tempdir(check = TRUE)
 
 for (url in urls) {
-  if (basename(url) == "5012-218-fruehjahrssession-d.xlsx") {
-    destfile <- "5012-2018-fruehjahrssession-d.xlsx"
-  } else {
-    destfile <- basename(url)
-  }
-
+  destfile <- basename(url)
   destfile <- file.path(tmp_data_dir, destfile)
   download.file(url, destfile, quiet = TRUE)
-  
 }
 
 
