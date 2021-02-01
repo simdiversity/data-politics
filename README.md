@@ -25,6 +25,7 @@ For more details see the scripts in the "data-raw" folder.
 
 ```R
 # Install the development version from GitHub
+library("devtools")
 devtools::install_github("simdiversity/data_politics")
 ```
 
