@@ -91,7 +91,7 @@ urls <- c(
   "https://www.parlament.ch/centers/documents/de/5015-2018-wintersession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5014-2018-herbstsession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5013-2018-sommersession-d.xlsx",
-  "https://www.parlament.ch/centers/documents/de/5012-218-fruehjahrssession-d.xlsx",
+  "https://www.parlament.ch/centers/documents/de/5012-2018-fruehjahrssession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5011-2017-wintersession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5010-2017-herbstsession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/5009-2017-sommersession-d.xlsx",
@@ -131,9 +131,6 @@ tmp_data_dir <- tempdir(check = TRUE)
 for (url in urls) {
   if (basename(url) == "5012-218-fruehjahrssession-d.xlsx") {
     destfile <- "5012-2018-fruehjahrssession-d.xlsx"
-  } else
-  if (basename(url) == "parlament_export_session_5019_de_CH.xlsx") {
-    destfile <- "5019-2019-herbstsession-d.xlsx"
   } else {
     destfile <- basename(url)
   }
