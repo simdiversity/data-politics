@@ -136,15 +136,8 @@ for (url in urls) {
   }
 
   destfile <- file.path(tmp_data_dir, destfile)
-  if (basename(url) == "4920-2015-herbstsession-d.xlsx") {
-    file.copy(
-      file.path(here("raw_data"), "4920-2015-herbstsession-d.xlsx"),
-      destfile,
-      overwrite = TRUE
-    )
-  } else {
-    download.file(url, destfile, quiet = TRUE)
-  }
+  download.file(url, destfile, quiet = TRUE)
+  
 }
 
 
