@@ -106,7 +106,7 @@ urls <- c(
   "https://www.parlament.ch/centers/documents/de/4920-2015-herbstsession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/4919-2015-sommersession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/4918-2015-sondersession-mai-d.xlsx",
-  "https://www.parlament.ch/centers/documents/de/4917-2015-fr%c3%bchjahrssession-d.xlsx",
+  "https://www.parlament.ch/centers/documents/de/4917-2015-fruehjahrssession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/4916-2014-wintersession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/4915-2014-herbstsession-d.xlsx",
   "https://www.parlament.ch/centers/documents/de/4914-2014-sommersession-d.xlsx",
